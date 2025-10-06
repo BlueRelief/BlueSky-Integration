@@ -61,46 +61,46 @@ def save_posts(posts_data: list, run_id: int) -> int:
 
 def save_analysis(analysis_text: str, run_id: int):
     """Parse and save disaster data from AI analysis"""
+    import json
+    import re
+    
     db = SessionLocal()
     
     try:
-        lines = analysis_text.split("\n")
-        current_disaster = {}
+        cleaned_text = analysis_text.strip()
         
-        for line in lines:
-            line = line.strip()
-            
-            if line.startswith(("**Location:**", "Location:")):
-                if current_disaster:
-                    _save_disaster(db, current_disaster, run_id)
-                    current_disaster = {}
-                current_disaster["location"] = line.split(":", 1)[-1].strip()
-            
-            elif line.startswith(("**Time:**", "Time:")):
-                current_disaster["event_time"] = line.split(":", 1)[-1].strip()
-            
-            elif line.startswith(("**Severity:**", "Severity:")):
-                severity_text = line.split(":", 1)[-1].strip()
-                try:
-                    severity = int(severity_text.split()[0])
-                    current_disaster["severity"] = severity
-                except:
-                    pass
-                current_disaster["description"] = severity_text
-            
-            elif "Magnitude" in line or "magnitude" in line:
-                try:
-                    import re
-                    mag_match = re.search(r"(\d+\.?\d*)", line)
-                    if mag_match:
-                        current_disaster["magnitude"] = float(mag_match.group(1))
-                except:
-                    pass
+        json_match = re.search(r'\[.*\]', cleaned_text, re.DOTALL)
+        if json_match:
+            cleaned_text = json_match.group(0)
         
-        if current_disaster:
-            _save_disaster(db, current_disaster, run_id)
+        cleaned_text = re.sub(r'^```json\s*', '', cleaned_text)
+        cleaned_text = re.sub(r'\s*```$', '', cleaned_text)
+        cleaned_text = cleaned_text.strip()
         
-        db.commit()
+        try:
+            disasters = json.loads(cleaned_text)
+            
+            if isinstance(disasters, dict):
+                disasters = [disasters]
+            
+            for disaster_data in disasters:
+                disaster = Disaster(
+                    location=disaster_data.get("location"),
+                    event_time=disaster_data.get("event_time"),
+                    severity=disaster_data.get("severity"),
+                    magnitude=disaster_data.get("magnitude"),
+                    description=disaster_data.get("description"),
+                    collection_run_id=run_id
+                )
+                db.add(disaster)
+            
+            db.commit()
+            print(f"Saved {len(disasters)} disasters from AI analysis")
+            
+        except json.JSONDecodeError as e:
+            print(f"Failed to parse JSON from AI response: {e}")
+            print(f"Response text: {cleaned_text}")
+            
     finally:
         db.close()
 
