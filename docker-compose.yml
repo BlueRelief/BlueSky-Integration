@@ -1,0 +1,124 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bluesky-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bluesky
+      POSTGRES_PASSWORD: bluesky123
+      POSTGRES_DB: bluesky
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - bluesky-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bluesky"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: bluesky-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - bluesky-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: .
+    container_name: bluesky-api
+    restart: unless-stopped
+    command: sh -c "python -c 'from app.database import init_db; init_db()' && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./.env:/app/.env
+    environment:
+      - BlueSky_Username=${BlueSky_Username}
+      - BlueSky_Password=${BlueSky_Password}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - SEARCH_HASHTAG=${SEARCH_HASHTAG:-#earthquake}
+      - POST_LIMIT=${POST_LIMIT:-50}
+      - SCHEDULE_HOURS=${SCHEDULE_HOURS:-24}
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://bluesky:bluesky123@postgres:5432/bluesky
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - bluesky-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  celery-worker:
+    build: .
+    container_name: bluesky-celery-worker
+    restart: unless-stopped
+    command: celery -A app.celery_app worker --loglevel=info
+    volumes:
+      - ./app:/app/app
+      - ./.env:/app/.env
+    environment:
+      - BlueSky_Username=${BlueSky_Username}
+      - BlueSky_Password=${BlueSky_Password}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - SEARCH_HASHTAG=${SEARCH_HASHTAG:-#earthquake}
+      - POST_LIMIT=${POST_LIMIT:-50}
+      - SCHEDULE_HOURS=${SCHEDULE_HOURS:-24}
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://bluesky:bluesky123@postgres:5432/bluesky
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - bluesky-network
+
+  celery-beat:
+    build: .
+    container_name: bluesky-celery-beat
+    restart: unless-stopped
+    command: celery -A app.celery_app beat --loglevel=info
+    volumes:
+      - ./app:/app/app
+      - ./.env:/app/.env
+    environment:
+      - BlueSky_Username=${BlueSky_Username}
+      - BlueSky_Password=${BlueSky_Password}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - SEARCH_HASHTAG=${SEARCH_HASHTAG:-#earthquake}
+      - POST_LIMIT=${POST_LIMIT:-50}
+      - SCHEDULE_HOURS=${SCHEDULE_HOURS:-24}
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://bluesky:bluesky123@postgres:5432/bluesky
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - bluesky-network
+
+networks:
+  bluesky-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
