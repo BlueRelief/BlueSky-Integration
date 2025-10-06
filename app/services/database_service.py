@@ -12,6 +12,9 @@ def create_collection_run() -> CollectionRun:
         db.commit()
         db.refresh(run)
         return run
+    except Exception as e:
+        db.rollback()
+        raise e
     finally:
         db.close()
 
@@ -27,6 +30,9 @@ def complete_collection_run(run_id: int, posts_count: int, status: str = "comple
             if error:
                 run.error_message = error
             db.commit()
+    except Exception as e:
+        db.rollback()
+        raise e
     finally:
         db.close()
 
@@ -56,6 +62,9 @@ def save_posts(posts_data: list, run_id: int) -> int:
         
         db.commit()
         return saved_count
+    except Exception as e:
+        db.rollback()
+        raise e
     finally:
         db.close()
 
@@ -100,7 +109,11 @@ def save_analysis(analysis_text: str, run_id: int):
         except json.JSONDecodeError as e:
             print(f"Failed to parse JSON from AI response: {e}")
             print(f"Response text: {cleaned_text}")
+            db.rollback()
             
+    except Exception as e:
+        db.rollback()
+        raise e
     finally:
         db.close()
 
@@ -133,6 +146,9 @@ def get_recent_disasters(limit: int = 50):
             }
             for d in disasters
         ]
+    except Exception as e:
+        db.rollback()
+        raise e
     finally:
         db.close()
 
@@ -161,5 +177,8 @@ def get_collection_stats():
                 for r in recent_runs
             ]
         }
+    except Exception as e:
+        db.rollback()
+        raise e
     finally:
         db.close()
