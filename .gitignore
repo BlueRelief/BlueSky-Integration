@@ -38,6 +38,12 @@ data/
 *.json
 *.txt
 
+# ML Results
+ml_*_results*.csv
+ml_best_hyperparameters.json
+ml_grid_search_*.csv
+grid_search_output.log
+
 # IDEs
 .vscode/
 .idea/
@@ -54,3 +60,5 @@ Thumbs.db
 
 # Docker
 docker-compose.override.yml
+commit-as.sh
+deploy.sh
